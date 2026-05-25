@@ -1,0 +1,57 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <title>Панель управления</title>
+</head>
+<body>
+
+    <h1>Панель управления</h1>
+
+    <p>
+        <button id="power-btn" onclick="togglePower()">ВКЛ</button>
+    </p>
+
+    <p>
+        <button onclick="runCommand(1)" disabled>Команда 1</button>
+        <button onclick="runCommand(2)" disabled>Команда 2</button>
+        <button onclick="runCommand(3)" disabled>Команда 3</button>
+    </p>
+
+    <p>Статус: <span id="status-text">выключено</span></p>
+
+    <script>
+        var isOn = false;
+
+        function togglePower() {
+            var btn = document.getElementById("power-btn");
+            var status = document.getElementById("status-text");
+            var buttons = document.querySelectorAll("button");
+
+            if (isOn == false) {
+                isOn = true;
+                btn.innerText = "ВЫКЛ";
+                status.innerText = "включено";
+                for (var i = 1; i < buttons.length; i++) {
+                    buttons[i].disabled = false;
+                }
+            } else {
+                isOn = false;
+                btn.innerText = "ВКЛ";
+                status.innerText = "выключено";
+                for (var i = 1; i < buttons.length; i++) {
+                    buttons[i].disabled = true;
+                }
+            }
+        }
+
+        function runCommand(num) {
+            if (isOn == false) {
+                return;
+            }
+            document.getElementById("status-text").innerText = "выполнена команда " + num;
+        }
+    </script>
+
+</body>
+</html>
