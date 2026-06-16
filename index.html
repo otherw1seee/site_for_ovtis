@@ -1,57 +1,117 @@
 <!DOCTYPE html>
 <html lang="ru">
 <head>
-    <meta charset="UTF-8">
-    <title>Панель управления</title>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Управление клешнёй</title>
 </head>
 <body>
 
-    <h1>Панель управления</h1>
+<h1>Управление пневмоклешнёй</h1>
 
-    <p>
-        <button id="power-btn" onclick="togglePower()">ВКЛ</button>
-    </p>
+<p>Связь с сервером: <b id="conn">соединение...</b></p>
 
-    <p>
-        <button onclick="runCommand(1)" disabled>Команда 1</button>
-        <button onclick="runCommand(2)" disabled>Команда 2</button>
-        <button onclick="runCommand(3)" disabled>Команда 3</button>
-    </p>
+<svg id="claw" width="220" height="160" viewBox="0 0 360 240" xmlns="http://www.w3.org/2000/svg">
+  <rect x="150" y="180" width="60" height="44" fill="#888"/>
+  <rect x="168" y="216" width="24" height="22" fill="#666"/>
+  <ellipse id="muscle" cx="180" cy="227" rx="10" ry="8" fill="#aaa"/>
+  <circle cx="180" cy="180" r="6" fill="#444"/>
+  <g id="clawL"><rect x="-9" y="-92" width="18" height="92" fill="#444"/></g>
+  <g id="clawR"><rect x="-9" y="-92" width="18" height="92" fill="#444"/></g>
+</svg>
 
-    <p>Статус: <span id="status-text">выключено</span></p>
+<p>Давление в мышце: <b id="presVal">0</b> %</p>
+<p>Состояние: <b id="stateValue">раскрыта</b></p>
 
-    <script>
-        var isOn = false;
+<p>
+  <button id="btnClose" onclick="cmd('/close')">Сжать клешню</button>
+  <button id="btnOpen" onclick="cmd('/open')">Разжать</button>
+</p>
 
-        function togglePower() {
-            var btn = document.getElementById("power-btn");
-            var status = document.getElementById("status-text");
-            var buttons = document.querySelectorAll("button");
+<p>
+  Сила сжатия (давление):
+  <input type="range" id="presSlider" min="0" max="100" value="0" onchange="setPressure(this.value)">
+  <span id="presNum">0</span>%
+</p>
 
-            if (isOn == false) {
-                isOn = true;
-                btn.innerText = "ВЫКЛ";
-                status.innerText = "включено";
-                for (var i = 1; i < buttons.length; i++) {
-                    buttons[i].disabled = false;
-                }
-            } else {
-                isOn = false;
-                btn.innerText = "ВКЛ";
-                status.innerText = "выключено";
-                for (var i = 1; i < buttons.length; i++) {
-                    buttons[i].disabled = true;
-                }
-            }
-        }
+<p>Статус: <span id="statusText">...</span> <span id="statusTime"></span></p>
 
-        function runCommand(num) {
-            if (isOn == false) {
-                return;
-            }
-            document.getElementById("status-text").innerText = "выполнена команда " + num;
-        }
-    </script>
+<p>
+  <small>
+    Управление выполняется через сервер на Python (server.py): команда отправляется
+    на сервер, он хранит состояние и возвращает его обратно. В изделии роль сервера
+    выполняет контроллер ESP32, подавая давление в пневмомышцу.
+  </small>
+</p>
+
+<script>
+  const ANGLE_OPEN = 32, ANGLE_CLOSED = 6, GRIP_THRESHOLD = 60;
+  const el = id => document.getElementById(id);
+
+  function nowTime() {
+    const d = new Date();
+    return [d.getHours(), d.getMinutes(), d.getSeconds()].map(n => String(n).padStart(2,'0')).join(':');
+  }
+
+  function applyStatus(s) {
+    const p = s.pressure, prog = p / 100;
+    const angle = ANGLE_OPEN - (ANGLE_OPEN - ANGLE_CLOSED) * prog;
+    el('clawL').setAttribute('transform', 'translate(180,180) rotate(' + (-angle) + ')');
+    el('clawR').setAttribute('transform', 'translate(180,180) rotate(' + angle + ')');
+    el('muscle').setAttribute('rx', (10 + prog * 8).toFixed(1));
+    el('presVal').textContent = p;
+    el('presNum').textContent = p;
+    el('presSlider').value = p;
+    el('stateValue').textContent = s.state;
+  }
+
+  function setStatus(t) { el('statusText').textContent = t; el('statusTime').textContent = nowTime(); }
+
+  async function cmd(path) {
+    el('btnClose').disabled = true; el('btnOpen').disabled = true;
+    setStatus('запрос на сервер...');
+    try {
+      const r = await fetch(path, { method: 'POST' });
+      const s = await r.json();
+      applyStatus(s);
+      el('conn').textContent = 'на связи';
+      setStatus(path === '/close' ? 'команда «сжать» выполнена' : 'команда «разжать» выполнена');
+    } catch (e) {
+      el('conn').textContent = 'нет связи';
+      setStatus('ошибка: сервер недоступен');
+    } finally {
+      el('btnClose').disabled = false; el('btnOpen').disabled = false;
+    }
+  }
+
+  async function setPressure(v) {
+    setStatus('установка давления на сервере...');
+    try {
+      const r = await fetch('/pressure?value=' + Math.round(v), { method: 'POST' });
+      const s = await r.json();
+      applyStatus(s);
+      el('conn').textContent = 'на связи';
+      setStatus('давление установлено: ' + s.pressure + '%');
+    } catch (e) {
+      el('conn').textContent = 'нет связи';
+      setStatus('ошибка: сервер недоступен');
+    }
+  }
+
+  async function poll() {
+    try {
+      const r = await fetch('/status');
+      const s = await r.json();
+      if (document.activeElement !== el('presSlider')) applyStatus(s);
+      el('conn').textContent = 'на связи';
+    } catch (e) {
+      el('conn').textContent = 'нет связи';
+    }
+  }
+
+  poll();
+  setInterval(poll, 1000);
+</script>
 
 </body>
 </html>
