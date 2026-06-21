@@ -1,0 +1,68 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Пневмоклешня — демо</title>
+</head>
+<body>
+
+<h1>Управление пневмоклешнёй (демо)</h1>
+
+<svg id="claw" width="220" height="160" viewBox="0 0 360 240" xmlns="http://www.w3.org/2000/svg">
+  <rect x="150" y="180" width="60" height="44" fill="#888"/>
+  <rect x="168" y="216" width="24" height="22" fill="#666"/>
+  <ellipse id="muscle" cx="180" cy="227" rx="10" ry="8" fill="#aaa"/>
+  <circle cx="180" cy="180" r="6" fill="#444"/>
+  <g id="clawL"><rect x="-9" y="-92" width="18" height="92" fill="#444"/></g>
+  <g id="clawR"><rect x="-9" y="-92" width="18" height="92" fill="#444"/></g>
+</svg>
+
+<p>Состояние: <b id="stateValue">раскрыта</b></p>
+
+<p>
+  <button id="btnClose" onclick="setClaw(true)">Сжать</button>
+  <button id="btnOpen" onclick="setClaw(false)">Разжать</button>
+</p>
+
+<p>
+  <small>
+    Демонстрация интерфейса. Управление выполняется через сервер на Python (server.py);
+    в изделии команды обрабатывает контроллер ESP32, подавая давление в пневмомышцу.
+  </small>
+</p>
+
+<script>
+  const ANGLE_OPEN = 32, ANGLE_CLOSED = 6;
+  let angle = ANGLE_OPEN, closed = false, busy = false;
+  const el = id => document.getElementById(id);
+
+  function render() {
+    el('clawL').setAttribute('transform', 'translate(180,180) rotate(' + (-angle) + ')');
+    el('clawR').setAttribute('transform', 'translate(180,180) rotate(' + angle + ')');
+    const prog = (ANGLE_OPEN - angle) / (ANGLE_OPEN - ANGLE_CLOSED);
+    el('muscle').setAttribute('rx', (10 + prog * 8).toFixed(1));
+    el('stateValue').textContent = closed ? 'сжата' : 'раскрыта';
+  }
+
+  function setClaw(toClosed) {
+    if (busy || toClosed === closed) return;
+    busy = true;
+    el('btnClose').disabled = true; el('btnOpen').disabled = true;
+    const start = angle, target = toClosed ? ANGLE_CLOSED : ANGLE_OPEN;
+    const t0 = performance.now(), dur = 600;
+    function step(now) {
+      const k = Math.min((now - t0) / dur, 1);
+      angle = start + (target - start) * k;
+      render();
+      if (k < 1) requestAnimationFrame(step);
+      else { angle = target; closed = toClosed; render(); busy = false; el('btnClose').disabled = false; el('btnOpen').disabled = false; }
+    }
+    requestAnimationFrame(step);
+  }
+
+  render();
+</script>
+
+</body>
+</html>
